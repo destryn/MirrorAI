@@ -1,0 +1,217 @@
+import numpy as np
+from random import random
+
+env = 5
+env_num = 1
+view_size = 3
+mirror_chance = 0.3 # 1.0 -> all mirrors, 0 -> none
+
+def generate_training_set_1d1m(environment_size, num_environments,view_size):
+
+    training_set = []
+    reference_set = []
+
+    num_observations = environment_size
+
+    for _ in range(num_environments):
+        noise = np.random.rand(environment_size).astype(np.float32)
+        for mirror_pos in range(environment_size):
+            mirror = np.zeros(environment_size, dtype=np.float32)
+            mirror[mirror_pos] = 1
+            training_v = np.zeros(view_size * num_observations, dtype=np.float32)
+            mirror_lost = np.zeros_like(noise)
+            mirror_lost[:] = noise[:]
+            for observer in range(num_observations):
+                mirror_lost[mirror_pos] = 1 if observer == mirror_pos else 0
+                for i in range(view_size):
+                    training_v_ind = view_size * observer + i
+                    mirror_lost_ind = observer + (i - 2)
+                    training_v[training_v_ind] = mirror_lost[mirror_lost_ind % environment_size]
+
+            training_set.append(training_v)
+            reference_set.append(mirror)
+
+    #for t_vec in training_set:
+        #print(t_vec)
+    print("training set created 1D1M")
+    return training_set, reference_set
+
+def generate_training_set_1d2m(environment_size, num_environments,view_size):
+
+    training_set = []
+    reference_set = []
+
+    num_observations = environment_size
+
+    for _ in range(num_environments):
+        noise = np.random.rand(environment_size).astype(np.float32)
+        for mirror_pos in range(environment_size):
+            other_mirror_pos = int((random()*environment_size))
+            mirror = np.zeros(environment_size, dtype=np.float32)
+            mirror[mirror_pos] = 1
+            mirror[other_mirror_pos] = 1
+            training_v = np.zeros(view_size * num_observations, dtype=np.float32)
+            mirror_lost = np.zeros_like(noise)
+            mirror_lost[:] = noise[:]
+            for observer in range(num_observations):
+                mirror_lost[mirror_pos] = (1 if observer == mirror_pos else 0)
+                mirror_lost[other_mirror_pos] = (1 if observer == other_mirror_pos else 0)
+                for i in range(view_size):
+                    training_v_ind = view_size * observer + i
+                    mirror_lost_ind = observer + (i - 2)
+                    training_v[training_v_ind] = mirror_lost[mirror_lost_ind % environment_size]
+
+            training_set.append(training_v)
+            reference_set.append(mirror)
+
+    #for t_vec in training_set:
+        #print(t_vec)
+    print("training set created 1D2M")
+    return training_set, reference_set
+
+def generate_training_set_1dnm(environment_size, num_environments,view_size,mirror_chance):
+
+    training_set = []
+    reference_set = []
+    
+    mirror_recognition = 0.00001
+    
+    #note that you need mirror_chance*environment_size > 1 to get any mirrors to appear 
+    number_of_mirrors = int(mirror_chance*environment_size)
+
+    num_observations = environment_size
+
+    for _ in range(num_environments):
+        noise = np.random.rand(environment_size).astype(np.float32)
+        for mirror_index in range(environment_size):
+            mirror = np.zeros(environment_size, dtype=np.float32)
+            for mirrors in range(number_of_mirrors):
+                mirror_pos = int(random()*environment_size)
+                mirror[mirror_pos] = 1
+            training_v = np.zeros(view_size * num_observations, dtype=np.float32)
+            mirror_lost = np.zeros_like(noise)
+            mirror_lost[:] = noise[:]
+            for observer in range(num_observations):
+                for scanner_pos in range(num_observations):
+                    if (np.abs(1-mirror[scanner_pos]) < mirror_recognition):
+                        mirror_lost[scanner_pos] = (1 if observer == mirror_pos else 0)
+                for i in range(view_size):
+                    training_v_ind = view_size * observer + i
+                    mirror_lost_ind = observer + (i - 2)
+                    training_v[training_v_ind] = mirror_lost[mirror_lost_ind % environment_size]
+
+            training_set.append(training_v)
+            reference_set.append(mirror)
+
+    #for t_vec in training_set:
+        #print(t_vec)
+    print("training set created 1DNM")
+    return training_set, reference_set
+
+def generate_training_set_2d1m(environment_size, num_environments,view_size):
+
+    training_set = []
+    reference_set = []
+
+    num_observations = environment_size**2
+
+    for _ in range(num_environments):
+        noise = np.random.rand(environment_size, environment_size).astype(np.float32)
+        for mirror_index in range(environment_size**2):
+            mirror_pos = (mirror_index//environment_size, mirror_index%environment_size)
+            mirror = np.zeros((environment_size, environment_size), dtype=np.float32)
+            mirror[mirror_pos] = 1
+            training_v = np.zeros((view_size * num_observations, view_size), dtype=np.float32)
+            mirror_lost = np.zeros_like(noise)
+            mirror_lost[:] = noise[:]
+            for observer in range(num_observations):
+                mirror_lost[mirror_pos] = (1 if (observer//environment_size, observer%environment_size) == mirror_pos else 0)
+                for i in range(view_size**2):
+                    training_v_ind = (view_size * observer + i//view_size, i%view_size)
+                    mirror_lost_ind = (observer - 1 + i//view_size, observer - 1 + i%view_size)
+                    training_v[training_v_ind] = mirror_lost[(mirror_lost_ind[0]%environment_size, mirror_lost_ind[1]%environment_size)]
+
+            training_set.append(training_v)
+            reference_set.append(mirror)
+
+    #for t_vec in training_set:
+        #print(t_vec)
+    print("training set created 2D1M")
+    return training_set, reference_set
+
+def generate_training_set_2d2m(environment_size, num_environments,view_size):
+
+    training_set = []
+    reference_set = []
+
+    num_observations = environment_size**2
+
+    for _ in range(num_environments):
+        noise = np.random.rand(environment_size, environment_size).astype(np.float32)
+        for mirror_index in range(environment_size**2):
+            other_mirror_pos = (int((random()*environment_size)),int(random()*environment_size))
+            mirror_pos = (mirror_index//environment_size, mirror_index%environment_size)
+            mirror = np.zeros((environment_size, environment_size), dtype=np.float32)
+            mirror[mirror_pos] = 1
+            mirror[other_mirror_pos] = 1
+            training_v = np.zeros((view_size * num_observations, view_size), dtype=np.float32)
+            mirror_lost = np.zeros_like(noise)
+            mirror_lost[:] = noise[:]
+            for observer in range(num_observations):
+                mirror_lost[mirror_pos] = (1 if (observer//environment_size, observer%environment_size) == mirror_pos else 0)
+                mirror_lost[other_mirror_pos] = (1 if (observer//environment_size, observer%environment_size) == other_mirror_pos else 0)
+                for i in range(view_size**2):
+                    training_v_ind = (view_size * observer + i//view_size, i%view_size)
+                    mirror_lost_ind = (observer - 1 + i//view_size, observer - 1 + i%view_size)
+                    training_v[training_v_ind] = mirror_lost[(mirror_lost_ind[0]%environment_size, mirror_lost_ind[1]%environment_size)]
+
+            training_set.append(training_v)
+            reference_set.append(mirror)
+
+    #for t_vec in training_set:
+        #print(t_vec)
+    print("training set created 2D2M")
+    return training_set, reference_set
+
+def generate_training_set_2dnm(environment_size, num_environments,view_size, mirror_chance):
+
+    training_set = []
+    reference_set = []
+    
+    mirror_recognition = 0.00001
+    
+    number_of_mirrors = int(mirror_chance*environment_size**2)
+
+    num_observations = environment_size**2
+
+    for _ in range(num_environments):
+        noise = np.random.rand(environment_size, environment_size).astype(np.float32)
+        for mirror_index in range(environment_size**2):
+            mirror = np.zeros((environment_size, environment_size), dtype=np.float32)
+            for mirrors in range(number_of_mirrors):
+                mirror_pos = (int(random()*environment_size), int(random()*environment_size))
+                mirror[mirror_pos] = 1
+            training_v = np.zeros((view_size * num_observations, view_size), dtype=np.float32)
+            mirror_lost = np.zeros_like(noise)
+            mirror_lost[:] = noise[:]
+            for observer in range(num_observations):
+                for scanner in range(num_observations):
+                    scanner_pos = (scanner//environment_size, scanner%environment_size)
+                    if (np.abs(1 - mirror[scanner_pos]) < mirror_recognition): 
+                        mirror_lost[scanner_pos] = (1 if (observer//environment_size, observer%environment_size) == scanner_pos else 0)
+                for i in range(view_size**2):
+                    training_v_ind = (view_size * observer + i//view_size, i%view_size)
+                    mirror_lost_ind = (observer - 1 + i//view_size, observer - 1 + i%view_size)
+                    training_v[training_v_ind] = mirror_lost[(mirror_lost_ind[0]%environment_size, mirror_lost_ind[1]%environment_size)]
+
+            training_set.append(training_v)
+            reference_set.append(mirror)
+
+    #for t_vec in training_set:
+        #print(t_vec)
+    print("training set created 2DNM")
+    return training_set, reference_set
+
+x,y = generate_training_set_1dnm(env, env_num, view_size, mirror_chance)
+print(x)
+print(y)
