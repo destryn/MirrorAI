@@ -1,0 +1,139 @@
+import numpy as np
+import tensorflow as tf
+from random import random
+
+env = 100
+view_size = 5 #must be odd
+num_env = 10
+train_len = 1000
+
+def generate_training_set(environment_size, num_environments,view_size):
+
+    training_set = []
+
+    num_observations = environment_size
+
+    for _ in range(num_environments):
+        noise = np.random.rand(environment_size).astype(np.float32)
+        for mirror_pos in range(environment_size):
+            mirror = np.zeros(environment_size, dtype=np.float32)
+            mirror[mirror_pos] = 1
+            training_v = np.zeros(view_size * num_observations, dtype=np.float32)
+            mirror_lost = np.zeros_like(noise)
+            mirror_lost[:] = noise[:]
+            for observer in range(num_observations):
+                mirror_lost[mirror_pos] = 1 if observer == mirror_pos else 0
+                for i in range(view_size):
+                    training_v_ind = view_size * observer + i
+                    mirror_lost_ind = observer + (i - 2)
+                    training_v[training_v_ind] = mirror_lost[mirror_lost_ind % environment_size]
+
+            training_set.append(training_v)
+
+    #for t_vec in training_set:
+        #print(t_vec)
+    #print("training set created")
+    return training_set
+
+def generate_training_set2(environment_size, num_environments,view_size):
+
+    training_set = []
+    reference_set = []
+
+    num_observations = environment_size
+
+    for _ in range(num_environments):
+        noise = np.random.rand(environment_size).astype(np.float32)
+        for mirror_pos in range(environment_size):
+            other_mirror_pos = int((random()*10))
+            mirror = np.zeros(environment_size, dtype=np.float32)
+            mirror[mirror_pos] = 1
+            mirror[other_mirror_pos] = 1
+            training_v = np.zeros(view_size * num_observations, dtype=np.float32)
+            mirror_lost = np.zeros_like(noise)
+            mirror_lost[:] = noise[:]
+            for observer in range(num_observations):
+                mirror_lost[mirror_pos] = (1 if observer == mirror_pos else 0)
+                mirror_lost[other_mirror_pos] = (1 if observer == other_mirror_pos else 0)
+                for i in range(view_size):
+                    training_v_ind = view_size * observer + i
+                    mirror_lost_ind = observer + (i - 2)
+                    training_v[training_v_ind] = mirror_lost[mirror_lost_ind % environment_size]
+
+            training_set.append(training_v)
+            reference_set.append(mirror)
+
+    #for t_vec in training_set:
+        #print(t_vec)
+    #print("training set2 created")
+    return training_set, reference_set
+
+def generate_reference_set(environment_size, num_environments):
+
+    reference_set=[]
+
+    for _ in range(num_environments):
+        for mirror_pos in range(environment_size):
+            mirror = np.zeros(environment_size, dtype=np.float32)
+            mirror[mirror_pos] = 1
+            reference_set.append(mirror)
+
+    #for t_vec in reference_set:
+        #print(t_vec)
+    print("reference set created")
+    return reference_set
+
+
+
+
+
+# Create the model
+x = tf.placeholder(tf.float32, [None, view_size*env])
+W = tf.Variable(tf.zeros([view_size*env, env]))
+b = tf.Variable(tf.zeros([env]))
+y = tf.matmul(x, W) + b
+
+# Define loss and optimizer
+y_ = tf.placeholder(tf.float32, [None, env])
+
+# The raw formulation of cross-entropy,
+#
+#   tf.reduce_mean(-tf.reduce_sum(y_ * tf.log(tf.nn.softmax(y)),
+#                                 reduction_indices=[1]))
+#
+# can be numerically unstable.
+#
+# So here we use tf.nn.softmax_cross_entropy_with_logits on the raw
+# outputs of 'y', and then average across the batch.
+cross_entropy = tf.reduce_mean(
+    tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y))
+train_step = tf.train.GradientDescentOptimizer(0.5).minimize(cross_entropy)
+
+sess = tf.InteractiveSession()
+tf.global_variables_initializer().run()
+# Train
+print("training")
+for _ in range(train_len):
+    batch_xs = generate_training_set(env, 1, view_size)
+    batch_ys = generate_reference_set(env, 1)
+    sess.run(train_step, feed_dict={x: batch_xs, y_: batch_ys})
+
+x_train = generate_training_set(env, num_env, view_size)
+y_train = generate_reference_set(env, num_env)
+
+# Test trained model
+correct_prediction = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
+accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+
+print("training for 1 mirror")
+print(sess.run(accuracy, feed_dict={x: x_train,
+                                  y_: y_train}))
+
+curr_W, curr_b  = sess.run([W, b], {x:x_train, y:y_train})
+#print("W: %s b: %s"%(curr_W, curr_b))
+
+x2_train, y2_train = generate_training_set2(env, num_env,view_size)
+
+print("training for 2 mirrors")
+print(sess.run(accuracy, feed_dict={x: x2_train,
+                                  y_: y2_train}))
